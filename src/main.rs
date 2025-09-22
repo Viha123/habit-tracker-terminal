@@ -94,12 +94,8 @@ impl App {
         if self.habits.show_habit_list {
             // self.habit_list_block(outer_layout[0], frame.buffer_mut());
             let items = self.habits.items.clone();
-            let list_widget= self.habit_list_block(items);
-            frame.render_stateful_widget(
-                list_widget,
-                outer_layout[0],
-                &mut self.habits.state,
-            );
+            let (_items, list_widget) = Self::habit_list_block(&items);
+            frame.render_stateful_widget(list_widget, outer_layout[0], &mut self.habits.state);
         }
         if self.habits.habit_calendar_track {
             // frame.render_widget(self.habits.habit_calendar_tracker_block(), inner_layout[0]);
@@ -159,7 +155,9 @@ impl App {
         self.running = false;
     }
 
-    pub fn habit_list_block(&self, items: Vec<user_habits::HabitItem>) -> List<'_> {
+    pub fn habit_list_block<'a>(
+        items: &'a [user_habits::HabitItem],
+    ) -> (Vec<ListItem<'a>>, List<'a>) {
         let habit_list = Line::from("Habit List").bold().blue().centered();
         let block = Block::new()
             .title(habit_list)
@@ -175,13 +173,12 @@ impl App {
                 ListItem::from(list_item.name.clone()).bg(color)
             })
             .collect();
-        let list = List::new(items)
+        let list = List::new(items.clone())
             .block(block)
             .highlight_style(SELECTED_STYLE)
             .highlight_symbol(">")
             .highlight_spacing(ratatui::widgets::HighlightSpacing::Always);
-
-        return list;
+        (items, list)
     }
     // this function needs a habit selected. So there must be data related to a habit
     pub fn habit_calendar_tracker_block(&self) -> Block<'_> {
