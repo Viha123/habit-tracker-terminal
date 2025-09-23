@@ -1,28 +1,41 @@
-use color_eyre::Result;
+use std::convert;
 
+use color_eyre::{
+    Result,
+    owo_colors::{OwoColorize, colors::css::PaleGoldenRod},
+};
+
+use catppuccin::PALETTE;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     DefaultTerminal, Frame,
     prelude::*,
     style::{
-        Color, Modifier, Style, Stylize,
+        Modifier, Style, Stylize,
         palette::tailwind::{BLUE, GREEN, SLATE},
     },
-    widgets::ListState,
-    widgets::{Block, Borders, List, ListItem, StatefulWidget},
+    symbols::border::PROPORTIONAL_TALL,
+    widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget},
 };
 
-const TODO_HEADER_STYLE: Style = Style::new().fg(SLATE.c100).bg(BLUE.c800);
-const NORMAL_ROW_BG: Color = SLATE.c950;
-const ALT_ROW_BG_COLOR: Color = SLATE.c900;
-const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
+const TODO_HEADER_STYLE: Style = Style::new()
+    .fg(SLATE.c100)
+    .bg(convert_color_type(PALETTE.macchiato.colors.base));
+const NORMAL_ROW_BG: Color = convert_color_type(PALETTE.macchiato.colors.base);
+const BORDER_COL: Color = convert_color_type(PALETTE.macchiato.colors.flamingo);
+const ALT_ROW_BG_COLOR: Color = convert_color_type(PALETTE.macchiato.colors.crust);
+const SELECTED_STYLE: Style = Style::new()
+    .bg(convert_color_type(PALETTE.macchiato.colors.overlay1))
+    .add_modifier(Modifier::BOLD);
 const TEXT_FG_COLOR: Color = SLATE.c200;
 const COMPLETED_TEXT_FG_COLOR: Color = GREEN.c500;
 
 use crate::user_habits::HabitItem;
 // use std::f64::consts::PI;
 mod user_habits;
-
+const fn convert_color_type(color: catppuccin::Color) -> Color {
+    return Color::Rgb(color.rgb.r, color.rgb.g, color.rgb.b);
+}
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
@@ -158,13 +171,17 @@ impl App {
     pub fn habit_list_block<'a>(
         items: &'a [user_habits::HabitItem],
     ) -> (Vec<ListItem<'a>>, List<'a>) {
-        let habit_list = Line::from("Habit List").bold().blue().centered();
+        let habit_list = Line::from("Habit List")
+            .bold()
+            .blue()
+            .centered();
+            // .style(Style::new().fg(convert_color_type(PALETTE.macchiato.colors.blue)));
+
         let block = Block::new()
             .title(habit_list)
-            .borders(Borders::TOP)
-            .border_set(symbols::border::EMPTY)
-            .border_style(TODO_HEADER_STYLE)
-            .bg(NORMAL_ROW_BG);
+            .borders(Borders::ALL)
+            .border_style(BORDER_COL);
+
         let items: Vec<ListItem> = items
             .iter()
             .enumerate()
@@ -176,8 +193,9 @@ impl App {
         let list = List::new(items.clone())
             .block(block)
             .highlight_style(SELECTED_STYLE)
-            .highlight_symbol(">")
+            .highlight_symbol(">>")
             .highlight_spacing(ratatui::widgets::HighlightSpacing::Always);
+            
         (items, list)
     }
     // this function needs a habit selected. So there must be data related to a habit
@@ -188,13 +206,15 @@ impl App {
             .centered();
         return Block::default()
             .title(habit_calendar_tracker_title)
-            .borders(Borders::ALL);
+            .borders(Borders::ALL)
+            .border_style(BORDER_COL);
     }
     pub fn habit_stats_tracker(&self) -> Block<'_> {
         let habit_stats_title = Line::from("Habit Stats").bold().blue().centered();
         Block::default()
             .title(habit_stats_title)
             .borders(Borders::ALL)
+            .border_style(BORDER_COL)
     }
 }
 
