@@ -1,13 +1,5 @@
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
-    style::{
-        Color, Modifier, Style, Stylize,
-        palette::tailwind::{BLUE, GREEN, SLATE},
-    },
-    symbols,
-    text::Line,
-    widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget},
+    widgets::{ListState},
 };
 
 
