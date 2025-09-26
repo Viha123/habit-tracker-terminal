@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use catppuccin::PALETTE;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
@@ -7,25 +9,44 @@ use ratatui::{
     style::{Color, Style, Stylize},
     text::Line,
     widgets::{
-        Block, Borders, List, ListItem, ListState,
+        Block, Borders, List, ListItem, ListState, Paragraph,
         calendar::{self},
     },
 };
 use time::OffsetDateTime;
 
-use crate::date_styler::{self, CompletedDateStyler};
+use crate::key_handlers;
 use crate::my_colors;
 use crate::user_habits;
+use crate::{
+    date_styler::{self, CompletedDateStyler},
+    my_colors::SELECTED_STYLE,
+};
+
 use color_eyre::Result;
 // use crate::my_colors;
 // /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
     /// Is the application running?
-    running: bool,
-    habits: user_habits::UserHabits,
+    pub running: bool,
+    pub habits: user_habits::UserHabits,
+    pub input_mode: InputMode,
+    pub habit_freq_buffer: String,
+    pub habit_name_buffer: String,
+}
+#[derive(Debug, PartialEq)]
+pub enum InputMode {
+    Normal,
+    EnteringName,
+    EnteringFrequency,
 }
 
+impl Default for InputMode {
+    fn default() -> Self {
+        InputMode::Normal
+    }
+}
 impl App {
     /// Construct a new instance of [`App`].
     pub fn new() -> Self {
@@ -35,6 +56,7 @@ impl App {
     /// Run the application's main loop.
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         self.running = true;
+        self.input_mode = InputMode::Normal;
         self.habits = user_habits::UserHabits {
             show_habit_list: true,
             habit_calendar_track: true,
@@ -117,64 +139,7 @@ impl App {
             frame.render_widget(self.habit_stats_tracker(), inner_layout[1])
         }
         if self.habits.show_add_habit {
-            let text = Block::new()
-                .title(Line::from("Add a habit here").bold().blue().centered())
-                .borders(Borders::ALL)
-                .border_style(my_colors::BORDER_COL);
-            frame.render_widget(text, left_layout[1]);
-        }
-    }
-
-    /// Reads the crossterm events and updates the state of [`App`].
-    ///
-    /// If your application needs to perform work in between handling events, you can use the
-    /// [`event::poll`] function to check if there are any events available with a timeout.
-    fn handle_crossterm_events(&mut self) -> Result<()> {
-        match event::read()? {
-            // it's important to check KeyEventKind::Press to avoid handling key release events
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// Handles the key events and updates the state of [`App`].
-    fn on_key_event(&mut self, key: KeyEvent) {
-        match (key.modifiers, key.code) {
-            (_, KeyCode::Char('q'))
-            | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-            // Add other key handlers here.
-            (_, KeyCode::Char('h') | KeyCode::Left) => self.select_none(),
-            (_, KeyCode::Char('j') | KeyCode::Down) => self.select_next(),
-            (_, KeyCode::Char('k') | KeyCode::Up) => self.select_previous(),
-            (_, KeyCode::Char('g') | KeyCode::Home) => self.select_first(),
-            (_, KeyCode::Char('G') | KeyCode::End) => self.select_last(),
-            (_, KeyCode::Esc) => self.habits.show_add_habit = false,
-            (_, KeyCode::Char('a')) => self.habits.show_add_habit = true,
-            _ => {}
-        }
-    }
-    fn select_none(&mut self) {
-        self.habits.state.select(None);
-    }
-    fn select_next(&mut self) {
-        self.habits.state.select_next();
-    }
-    fn select_previous(&mut self) {
-        self.habits.state.select_previous();
-    }
-    fn select_first(&mut self) {
-        self.habits.state.select_first();
-    }
-    fn select_last(&mut self) {
-        self.habits.state.select_last();
-    }
-    /// Set running to false to quit the application.
-    fn quit(&mut self) {
-        if (!self.habits.show_add_habit) {
-            self.running = false;
+            self.display_add_habit(frame, left_layout[1]);
         }
     }
 
@@ -228,7 +193,54 @@ impl App {
             .borders(Borders::ALL)
             .border_style(my_colors::BORDER_COL)
     }
-    // pub fn display_add_habit(&self)
+    pub fn display_add_habit(&self, frame: &mut Frame, area: ratatui::layout::Rect) {
+        // Split the area vertically for title, name input, and frequency input
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Title block
+                Constraint::Length(3), // Name input
+                Constraint::Length(3), // Frequency input
+            ])
+            .split(area);
+
+        // Title block
+        let title_block = Block::new()
+            .title(Line::from("Add a habit here").bold().blue().centered())
+            .borders(Borders::ALL)
+            .border_style(my_colors::BORDER_COL);
+        frame.render_widget(title_block, chunks[0]);
+
+        // Habit name input block
+        let mut name_style: Style = my_colors::NORMAL_STYLE;
+        if self.input_mode == InputMode::EnteringName {
+            name_style = SELECTED_STYLE;
+        }
+        let name_block = Block::new()
+            .title("Habit Name")
+            .borders(Borders::ALL)
+            .border_style(name_style);
+        // Habit name input block
+        let mut para_style: Style = my_colors::NORMAL_STYLE;
+        if self.input_mode == InputMode::EnteringFrequency {
+            para_style = SELECTED_STYLE;
+        }
+
+        let name_paragraph = Paragraph::new(self.habit_name_buffer.clone())
+            .centered()
+            .block(name_block);
+        frame.render_widget(name_paragraph, chunks[1]);
+
+        // Habit frequency input block
+        let freq_block = Block::new()
+            .title("Frequency (Times/Week)")
+            .borders(Borders::ALL)
+            .border_style(para_style);
+        let freq_paragraph = Paragraph::new(self.habit_freq_buffer.clone())
+            .centered()
+            .block(freq_block);
+        frame.render_widget(freq_paragraph, chunks[2]);
+    }
 }
 
 const fn alternate_colors(i: usize) -> Color {

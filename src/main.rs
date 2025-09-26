@@ -3,6 +3,7 @@ mod date_styler;
 mod my_colors;
 mod user_habits;
 mod db;
+mod key_handlers;
 
 
 fn main() -> color_eyre::Result<()> {
