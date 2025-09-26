@@ -9,4 +9,5 @@ color-eyre = "0.6.3"
 crossterm = "0.28.1"
 catppuccin = "2.5.1"
 time = "0.3"
+rusqlite = "0.37.0"
 

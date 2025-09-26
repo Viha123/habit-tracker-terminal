@@ -1,8 +1,9 @@
 mod app;
-
 mod date_styler;
 mod my_colors;
 mod user_habits;
+mod db;
+
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;

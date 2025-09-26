@@ -21,8 +21,12 @@ impl CompletedDateStyler {
     pub fn new() -> Self {
         // test dates
         Self {
-          completed_dates : vec![Date::from_calendar_date(2025, time::Month::September, 20).unwrap(),
-            Date::from_calendar_date(2025, time::Month::September, 22).unwrap()]
+            completed_dates: vec![
+                Date::from_calendar_date(2025, time::Month::September, 20).unwrap(),
+                Date::from_calendar_date(2025, time::Month::September, 22).unwrap(),
+                Date::from_calendar_date(2025, time::Month::September, 1).unwrap(),
+                
+            ],
         }
     }
 }

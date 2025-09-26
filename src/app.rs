@@ -13,10 +13,10 @@ use ratatui::{
 };
 use time::OffsetDateTime;
 
-use color_eyre::Result;
 use crate::date_styler::{self, CompletedDateStyler};
 use crate::my_colors;
 use crate::user_habits;
+use color_eyre::Result;
 // use crate::my_colors;
 // /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
@@ -38,20 +38,26 @@ impl App {
         self.habits = user_habits::UserHabits {
             show_habit_list: true,
             habit_calendar_track: true,
+            show_add_habit: false,
             habit_stats: true,
             items: vec![
                 user_habits::HabitItem {
                     name: String::from("Mediation"),
+                    active: false,
+                    id: 1,
+                    frequency: 1,
+                    current_streak: 1,
+                    max_streak: 1,
                 },
-                user_habits::HabitItem {
-                    name: String::from("Guitar"),
-                },
-                user_habits::HabitItem {
-                    name: String::from("Running"),
-                },
-                user_habits::HabitItem {
-                    name: String::from("Programming"),
-                },
+                // user_habits::HabitItem {
+                //     name: String::from("Guitar"),
+                // },
+                // user_habits::HabitItem {
+                //     name: String::from("Running"),
+                // },
+                // user_habits::HabitItem {
+                //     name: String::from("Programming"),
+                // },
             ],
             state: ListState::default(),
         };
@@ -78,6 +84,10 @@ impl App {
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(outer_layout[1]);
+        let left_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(outer_layout[0]);
         if self.habits.show_habit_list {
             // self.habit_list_block(outer_layout[0], frame.buffer_mut());
             let items = self.habits.items.clone();
@@ -86,11 +96,32 @@ impl App {
         }
         if self.habits.habit_calendar_track {
             // frame.render_widget(self.habits.habit_calendar_tracker_block(), inner_layout[0]);
+            let habit_calendar_tracker_title_block = Block::new()
+                .title(
+                    Line::from("Habit Calendars Tracker")
+                        .bold()
+                        .blue()
+                        .centered(),
+                )
+                .borders(Borders::ALL)
+                .border_style(my_colors::BORDER_COL);
 
-            frame.render_widget(self.habit_calendar_tracker_block(), inner_layout[0]);
+            let block = self.habit_calendar_tracker_block(&habit_calendar_tracker_title_block);
+            if block.is_some() {
+                frame.render_widget(&block, inner_layout[0]);
+            } else {
+                frame.render_widget(&habit_calendar_tracker_title_block, inner_layout[0]);
+            }
         }
         if self.habits.habit_stats {
             frame.render_widget(self.habit_stats_tracker(), inner_layout[1])
+        }
+        if self.habits.show_add_habit {
+            let text = Block::new()
+                .title(Line::from("Add a habit here").bold().blue().centered())
+                .borders(Borders::ALL)
+                .border_style(my_colors::BORDER_COL);
+            frame.render_widget(text, left_layout[1]);
         }
     }
 
@@ -112,7 +143,7 @@ impl App {
     /// Handles the key events and updates the state of [`App`].
     fn on_key_event(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
-            (_, KeyCode::Esc | KeyCode::Char('q'))
+            (_, KeyCode::Char('q'))
             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
             // Add other key handlers here.
             (_, KeyCode::Char('h') | KeyCode::Left) => self.select_none(),
@@ -120,6 +151,8 @@ impl App {
             (_, KeyCode::Char('k') | KeyCode::Up) => self.select_previous(),
             (_, KeyCode::Char('g') | KeyCode::Home) => self.select_first(),
             (_, KeyCode::Char('G') | KeyCode::End) => self.select_last(),
+            (_, KeyCode::Esc) => self.habits.show_add_habit = false,
+            (_, KeyCode::Char('a')) => self.habits.show_add_habit = true,
             _ => {}
         }
     }
@@ -140,12 +173,12 @@ impl App {
     }
     /// Set running to false to quit the application.
     fn quit(&mut self) {
-        self.running = false;
+        if (!self.habits.show_add_habit) {
+            self.running = false;
+        }
     }
 
-    pub fn habit_list_block<'a>(
-        items: &'a [user_habits::HabitItem],
-    ) -> (Vec<ListItem<'a>>, List<'a>) {
+    pub fn habit_list_block(items: &'_ [user_habits::HabitItem]) -> (Vec<ListItem<'_>>, List<'_>) {
         let habit_list = Line::from("Habit List").bold().blue().centered();
         // .style(Style::new().fg(convert_color_type(PALETTE.macchiato.colors.blue)));
 
@@ -171,27 +204,22 @@ impl App {
         (items, list)
     }
     // this function needs a habit selected. So there must be data related to a habit
-    pub fn habit_calendar_tracker_block(&self) -> calendar::Monthly<'_, CompletedDateStyler> {
+    pub fn habit_calendar_tracker_block<'a>(
+        &self,
+        habit_calendar_titile_block: &Block<'a>,
+    ) -> Option<calendar::Monthly<'a, CompletedDateStyler>> {
         let date = OffsetDateTime::now_utc().date();
-        let habit_calendar_tracker_title = Line::from("Habit Calendars Tracker")
-            .bold()
-            .blue()
-            .centered();
-        
-        let date_styled_cal = CompletedDateStyler::new();
-        let cal = calendar::Monthly::new(
-            date,
-            date_styled_cal,
-        )
-        .block(
-            Block::new()
-                .title(habit_calendar_tracker_title)
-                .borders(Borders::ALL)
-                .border_style(my_colors::BORDER_COL),
-        )
-        .show_month_header(Style::new().bold())
-        .show_weekdays_header(Style::new().italic());
-        return cal;
+        let idx = self.habits.state.selected();
+        if idx.is_some() {
+            let date_styled_cal = CompletedDateStyler::new();
+            let cal = calendar::Monthly::new(date, date_styled_cal)
+                .block(habit_calendar_titile_block.clone())
+                .show_month_header(Style::new().bold())
+                .show_weekdays_header(Style::new().italic());
+            return Some(cal);
+        } else {
+            return None;
+        }
     }
     pub fn habit_stats_tracker(&self) -> Block<'_> {
         let habit_stats_title = Line::from("Habit Stats").bold().blue().centered();
@@ -200,6 +228,7 @@ impl App {
             .borders(Borders::ALL)
             .border_style(my_colors::BORDER_COL)
     }
+    // pub fn display_add_habit(&self)
 }
 
 const fn alternate_colors(i: usize) -> Color {
