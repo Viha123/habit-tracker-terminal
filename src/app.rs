@@ -1,7 +1,3 @@
-use std::rc::Rc;
-
-use catppuccin::PALETTE;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout},
@@ -15,16 +11,11 @@ use ratatui::{
 };
 use time::OffsetDateTime;
 
-use crate::key_handlers;
 use crate::my_colors;
 use crate::user_habits;
-use crate::{
-    date_styler::{self, CompletedDateStyler},
-    my_colors::SELECTED_STYLE,
-};
-
+use crate::{date_styler::CompletedDateStyler, my_colors::SELECTED_STYLE};
 use color_eyre::Result;
-// use crate::my_colors;
+use crate::db::db;
 // /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
@@ -34,6 +25,7 @@ pub struct App {
     pub input_mode: InputMode,
     pub habit_freq_buffer: String,
     pub habit_name_buffer: String,
+    pub db: db,
 }
 #[derive(Debug, PartialEq)]
 pub enum InputMode {
@@ -63,23 +55,6 @@ impl App {
             show_add_habit: false,
             habit_stats: true,
             items: vec![
-                user_habits::HabitItem {
-                    name: String::from("Mediation"),
-                    active: false,
-                    id: 1,
-                    frequency: 1,
-                    current_streak: 1,
-                    max_streak: 1,
-                },
-                // user_habits::HabitItem {
-                //     name: String::from("Guitar"),
-                // },
-                // user_habits::HabitItem {
-                //     name: String::from("Running"),
-                // },
-                // user_habits::HabitItem {
-                //     name: String::from("Programming"),
-                // },
             ],
             state: ListState::default(),
         };
@@ -112,7 +87,7 @@ impl App {
             .split(outer_layout[0]);
         if self.habits.show_habit_list {
             // self.habit_list_block(outer_layout[0], frame.buffer_mut());
-            let items = self.habits.items.clone();
+            let items = self.db.get_habits().clone();
             let (_items, list_widget) = Self::habit_list_block(&items);
             frame.render_stateful_widget(list_widget, outer_layout[0], &mut self.habits.state);
         }
@@ -198,6 +173,7 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
+                // /// The main application which holds the state and logic of the application.
                 Constraint::Length(3), // Title block
                 Constraint::Length(3), // Name input
                 Constraint::Length(3), // Frequency input
