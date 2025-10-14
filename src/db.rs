@@ -1,4 +1,5 @@
 use rusqlite::{Connection, Params, Result};
+use time::Date;
 
 use crate::user_habits::HabitItem;
 #[derive(Debug)]
@@ -50,7 +51,8 @@ impl db {
             .conn
             .as_ref()
             .expect("should be a connection")
-            .prepare("SELECT * FROM habits").expect("idk");
+            .prepare("SELECT * FROM habits")
+            .expect("idk");
         let habit_vec: Vec<HabitItem> = stmt
             .query_map([], |row| {
                 Ok(HabitItem {
@@ -61,10 +63,56 @@ impl db {
                     current_streak: row.get(4)?,
                     max_streak: row.get(5)?,
                 })
-            }).unwrap()
-            .filter_map(|res| res.ok()).collect();
+            })
+            .unwrap()
+            .filter_map(|res| res.ok())
+            .collect();
         // Ok(())
         habit_vec
+    }
+
+    pub fn add_completed(&self, date: &Date, item: &HabitItem, hours: u32) {
+        // let mut stmt = self.conn.as_ref().expect("should be a connection").prepare("INSERT INTO habit_calendar(habit_id, date_completed, hours, notes) VALUES (?1, ?1, ?1, ?1)").expect("error in sql statement");
+
+        // let _res = stmt
+        //     .execute((item.id, date.to_string(), hours, "Nothing"))
+        //     .expect("Added completed date for today");
+        let _res = self.conn.as_ref().unwrap().execute("INSERT INTO habit_calendar(habit_id, date_completed, hours, notes) VALUES (?1, ?2, ?3, ?4)", (item.id, date.to_string(), hours, "Nothing"));
+        
+    }
+
+    pub fn get_id_from_name(&self, name: String) -> u64 {
+        let mut stmt = self
+            .conn
+            .as_ref()
+            .expect("should be a connection")
+            .prepare("SELECT habit_id from habits where name = (?1)")
+            .expect("could not get id from name");
+        let id: Vec<u64> = stmt
+            .query_map([name], |row| Ok(row.get(0)?))
+            .unwrap()
+            .filter_map(|res| res.ok())
+            .collect();
+
+        return id[0];
+    }
+
+    pub fn list_completed_dates(&self, id: u64) -> Vec<String> {
+        let mut stmt = self
+            .conn
+            .as_ref()
+            .expect("Connection refused")
+            .prepare("SELECT date_completed from habit_calendar WHERE habit_id = (?1)")
+            .expect("wrong sql prep");
+        let dates_vec: Vec<String> = stmt
+            .query_map([id], |row| Ok(row.get(0)?))
+            .unwrap()
+            .filter_map(|res| res.ok())
+            .collect();
+        dates_vec
+    }
+    pub fn compute_streak() {
+        todo!()
     }
 }
 

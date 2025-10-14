@@ -1,5 +1,6 @@
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use time::{Date, OffsetDateTime};
 
 use crate::app::{App, InputMode};
 use crate::db::{self};
@@ -26,6 +27,7 @@ impl App {
             InputMode::Normal => self.handle_normal_mode(key),
             InputMode::EnteringName => self.handle_name_input(key),
             InputMode::EnteringFrequency => self.handle_freq_input(key),
+            InputMode::MarkingDone => self.handle_input_done(key),
         }
     }
 
@@ -44,10 +46,32 @@ impl App {
                 self.habit_name_buffer.clear();
                 self.habits.show_add_habit = true;
             }
+            (_, KeyCode::Tab) => {
+                self.input_mode = InputMode::MarkingDone;
+            }
             _ => {}
         }
     }
-
+    fn handle_input_done(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::BackTab => {
+                self.input_mode = InputMode::Normal;
+            }
+            
+            KeyCode::Enter => {
+                let idx = self.habits.state.selected();
+                if idx.is_some() {
+                    self.db.add_completed(
+                        &OffsetDateTime::now_utc().date(),
+                        &self.habits.items[idx.unwrap()],
+                        1,
+                    );
+                }
+            }
+            // maybe this mode is view only for now. Mark done should just happen on the left bar
+            _ => {}
+        }
+    }
     fn handle_name_input(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Enter | KeyCode::Tab => {

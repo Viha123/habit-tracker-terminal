@@ -1,21 +1,15 @@
 use ratatui::{
-    DefaultTerminal, Frame,
-    layout::{Constraint, Layout},
-    prelude::*,
-    style::{Color, Style, Stylize},
-    text::Line,
-    widgets::{
-        Block, Borders, List, ListItem, ListState, Paragraph,
-        calendar::{self},
-    },
+    layout::{Constraint, Layout}, prelude::*, style::{Color, Style, Stylize}, symbols::border, text::Line, widgets::{
+        calendar::{self}, Block, Borders, List, ListItem, ListState, Paragraph
+    }, DefaultTerminal, Frame
 };
 use time::OffsetDateTime;
 
+use crate::db::db;
 use crate::my_colors;
 use crate::user_habits;
 use crate::{date_styler::CompletedDateStyler, my_colors::SELECTED_STYLE};
 use color_eyre::Result;
-use crate::db::db;
 // /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
@@ -24,6 +18,8 @@ pub struct App {
     pub habits: user_habits::UserHabits,
     pub input_mode: InputMode,
     pub habit_freq_buffer: String,
+    pub habit_hours_buffer: String,
+    pub habit_hours_done: bool,
     pub habit_name_buffer: String,
     pub db: db,
 }
@@ -32,6 +28,7 @@ pub enum InputMode {
     Normal,
     EnteringName,
     EnteringFrequency,
+    MarkingDone
 }
 
 impl Default for InputMode {
@@ -54,8 +51,7 @@ impl App {
             habit_calendar_track: true,
             show_add_habit: false,
             habit_stats: true,
-            items: vec![
-            ],
+            items: vec![],
             state: ListState::default(),
         };
         while self.running {
@@ -87,12 +83,17 @@ impl App {
             .split(outer_layout[0]);
         if self.habits.show_habit_list {
             // self.habit_list_block(outer_layout[0], frame.buffer_mut());
-            let items = self.db.get_habits().clone();
+            self.habits.items = self.db.get_habits().clone();
+            let items = self.habits.items.clone();
             let (_items, list_widget) = Self::habit_list_block(&items);
             frame.render_stateful_widget(list_widget, outer_layout[0], &mut self.habits.state);
         }
         if self.habits.habit_calendar_track {
             // frame.render_widget(self.habits.habit_calendar_tracker_block(), inner_layout[0]);
+            let mut border_style = my_colors::NORMAL_STYLE;
+            if self.input_mode == InputMode::MarkingDone {
+                border_style = SELECTED_STYLE;
+            }
             let habit_calendar_tracker_title_block = Block::new()
                 .title(
                     Line::from("Habit Calendars Tracker")
@@ -101,7 +102,7 @@ impl App {
                         .centered(),
                 )
                 .borders(Borders::ALL)
-                .border_style(my_colors::BORDER_COL);
+                .border_style(border_style);
 
             let block = self.habit_calendar_tracker_block(&habit_calendar_tracker_title_block);
             if block.is_some() {
@@ -149,9 +150,14 @@ impl App {
         habit_calendar_titile_block: &Block<'a>,
     ) -> Option<calendar::Monthly<'a, CompletedDateStyler>> {
         let date = OffsetDateTime::now_utc().date();
-        let idx = self.habits.state.selected();
+        let idx = self.get_current_habit();
+        
         if idx.is_some() {
-            let date_styled_cal = CompletedDateStyler::new();
+            let temp_vec = self.db.list_completed_dates(idx.unwrap());
+            let mut date_styled_cal = CompletedDateStyler::new();
+            date_styled_cal
+                .update_dates(temp_vec)
+                .expect("updated message");
             let cal = calendar::Monthly::new(date, date_styled_cal)
                 .block(habit_calendar_titile_block.clone())
                 .show_month_header(Style::new().bold())
@@ -216,6 +222,17 @@ impl App {
             .centered()
             .block(freq_block);
         frame.render_widget(freq_paragraph, chunks[2]);
+    }
+
+    pub fn get_current_habit(&self) -> Option<u64> {
+        let idx = self.habits.state.selected();
+        if idx.is_some() {
+            return Some(
+                self.habits.items[idx.unwrap()].id
+            );
+        } else {
+            return None;
+        }
     }
 }
 
