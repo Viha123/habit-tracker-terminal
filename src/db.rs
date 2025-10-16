@@ -1,10 +1,25 @@
 use rusqlite::{Connection, Params, Result};
 use time::Date;
+use std::fmt;
 
 use crate::user_habits::HabitItem;
 #[derive(Debug)]
 pub struct db {
     pub conn: Result<Connection>,
+}
+pub enum TimeFrame {
+    Week,
+    Month,
+    Year,
+}
+impl fmt::Display for TimeFrame {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TimeFrame::Week => write!(f, "Week"),
+            TimeFrame::Month => write!(f, "Month"),
+            TimeFrame::Year => write!(f, "Year"),
+        }
+    }
 }
 
 impl db {
@@ -77,7 +92,7 @@ impl db {
          VALUES (?1, ?2, ?3)
          ON CONFLICT(habit_id, date_completed) 
          DO UPDATE SET hours = ?3",
-            (item.id, date.to_string(), hours), 
+            (item.id, date.to_string(), hours),
         );
     }
 
@@ -111,8 +126,27 @@ impl db {
             .collect();
         dates_vec
     }
-    pub fn compute_streak() {
+    pub fn compute_streak(&self) {
         todo!()
+    }
+
+    pub fn get_hours(&self, habit_id: u64, tf: TimeFrame) -> u32 {
+        // takes in a time frame and returns habit hours for that timeframe
+        let date_str;
+        match tf {
+            TimeFrame::Month => date_str = "%Y-%m",
+            TimeFrame::Week => {
+                date_str = "%Y-%W";
+            }
+            TimeFrame::Year => {
+                date_str = "%Y";
+            }
+        }
+        let mut stmt = self.conn.as_ref().expect("Connection Refused").prepare("select SUM(hours) from habit_calendar where strftime((?1), date_completed) = strftime((?1), 'now') AND habit_id=(?2);").expect("wrong sql get date stuff");
+        let hours: Option<u32> = stmt
+            .query_row((date_str, habit_id), |row| row.get(0))
+            .unwrap_or(None);
+        hours.unwrap_or(0)
     }
 
     pub fn delete_habit(&self, habit_id: u64) -> rusqlite::Result<usize> {
@@ -123,7 +157,7 @@ impl db {
             )
         })?;
 
-        let rows_affected = conn.execute("DELETE FROM habits WHERE id = ?1", [habit_id])?;
+        let rows_affected = conn.execute("DELETE FROM habits WHERE habit_id = (?1)", [habit_id])?;
 
         Ok(rows_affected)
     }

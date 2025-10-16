@@ -7,7 +7,7 @@ use ratatui::{
     symbols::border,
     text::Line,
     widgets::{
-        Block, Borders, List, ListItem, ListState, Paragraph,
+        Bar, BarChart, BarGroup, Block, Borders, List, ListItem, ListState, Paragraph,
         calendar::{self},
     },
 };
@@ -115,7 +115,10 @@ impl App {
             self.render_hours_input(frame, enter_hours_layout[1]);
         }
         if self.habits.habit_stats {
-            frame.render_widget(self.habit_stats_tracker(), inner_layout[1])
+            let block = self.habit_stats_tracker();
+            if block.is_some() {
+                frame.render_widget(&block, inner_layout[1])
+            }
         }
         if self.habits.show_add_habit {
             self.display_add_habit(frame, left_layout[1]);
@@ -170,13 +173,62 @@ impl App {
             return None;
         }
     }
-    pub fn habit_stats_tracker(&self) -> Block<'_> {
+    pub fn habit_stats_tracker(&self) -> Option<BarChart<'_>> {
+        let idx = self.get_current_habit();
+        if idx.is_some() {
+            let hours_array = vec![
+                self.db.get_hours(idx.unwrap(), crate::db::TimeFrame::Week),
+                self.db.get_hours(idx.unwrap(), crate::db::TimeFrame::Month),
+                self.db.get_hours(idx.unwrap(), crate::db::TimeFrame::Year),
+            ];
+            let labels_array: Vec<String> = vec![
+                crate::db::TimeFrame::Week.to_string(),
+                crate::db::TimeFrame::Month.to_string(),
+                crate::db::TimeFrame::Year.to_string(),
+            ];
+            let max_hours: Vec<u32> = vec![40, 200, 1000];
+            return Some(self.vertical_barchart(&hours_array, &labels_array, &max_hours));
+        } else {
+            return None;
+        }
+    }
+
+    /// Create a vertical bar chart from the valuess data.
+    fn vertical_barchart(
+        &self,
+        values: &[u32],
+        labels: &[String],
+        max_hours: &[u32],
+    ) -> BarChart<'_> {
+        let zipped: Vec<(&u32, &String)> = values.iter().zip(labels).collect();
+        let bars: Vec<Bar> = zipped
+            .iter()
+            .map(|(value, label)| self.vertical_bar(value, label))
+            .collect();
+
         let habit_stats_title = Line::from("Habit Stats").bold().blue().centered();
-        Block::default()
+        let block = Block::new()
             .title(habit_stats_title)
             .borders(Borders::ALL)
-            .border_style(my_colors::BORDER_COL)
+            .border_style(my_colors::BORDER_COL);
+
+        BarChart::default()
+            .data(BarGroup::default().bars(&bars))
+            .block(block)
+            .bar_width(5)
+            .bar_gap(10)
+            .max(max_hours[2].into())
     }
+
+    fn vertical_bar(&self, value: &u32, label: &String) -> Bar<'_> {
+        Bar::default()
+            .value(u64::from(*value))
+            .label(Line::from(label.clone()))
+            .text_value(format!("{value:>3}"))
+            .style(my_colors::NORMAL_STYLE)
+            .value_style(my_colors::NORMAL_STYLE.reversed())
+    }
+
     pub fn display_add_habit(&self, frame: &mut Frame, area: ratatui::layout::Rect) {
         // Split the area vertically for title, name input, and frequency input
         let chunks = Layout::default()
@@ -238,9 +290,10 @@ impl App {
             .borders(Borders::ALL)
             .border_style(border_style);
 
-        let hours_paragraph = Paragraph::new(self.habit_hours_buffer.content.clone())
-            .centered()
-            .block(hours_block);
+        let hours_paragraph: Paragraph<'_> =
+            Paragraph::new(self.habit_hours_buffer.content.clone())
+                .centered()
+                .block(hours_block);
 
         frame.render_widget(hours_paragraph, area);
     }
