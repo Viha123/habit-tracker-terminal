@@ -1,39 +1,54 @@
-use crate::{db::db, my_colors};
-use ratatui::{style::Style, widgets::calendar};
+use ratatui::{style::Style, widgets::calendar::DateStyler};
 use time::Date;
-// hold completed dates from database
-pub struct CompletedDateStyler {
-    completed_dates: Vec<Date>,
-}
 
-impl calendar::DateStyler for CompletedDateStyler {
-    fn get_style(&self, date: Date) -> ratatui::prelude::Style {
-        
-        for d in &self.completed_dates {
-            if *d == date {
-                return my_colors::SELECTED_STYLE;
-            }
-        }
-        return Style::new();
-    }
+use crate::my_colors::{SELECTED_STYLE, STREAK_STYLE};
+
+#[derive(Debug, Default)]
+pub struct CompletedDateStyler {
+    pub completed_dates: Vec<Date>,
+    pub streak_dates: Vec<Date>,
 }
 
 impl CompletedDateStyler {
     pub fn new() -> Self {
-        // test dates
-        Self {
-            completed_dates: vec![],
+        CompletedDateStyler {
+            completed_dates: Vec::new(),
+            streak_dates: Vec::new(),
         }
     }
-    // this is technically inefficient but we really don't care for like habits and such
-    pub fn update_dates(&mut self, dates: Vec<String>) -> Result<(), time::Error> {
-        self.completed_dates.clear();
-        let format = time::format_description::parse("[year]-[month]-[day]")?;
-        for date_str in dates {
-            let date = Date::parse(&date_str, &format)?;
-            self.completed_dates.push(date);
+    pub fn update_dates(&mut self, dates: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+        for date in dates {
+            let d = Date::parse(
+                &date,
+                &time::format_description::well_known::Iso8601::DEFAULT,
+            )?;
+            self.completed_dates.push(d);
         }
-
         Ok(())
+    }
+
+    pub fn update_streak_dates(
+        &mut self,
+        dates: Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for date in dates {
+            let d = Date::parse(
+                &date,
+                &time::format_description::well_known::Iso8601::DEFAULT,
+            )?;
+            self.streak_dates.push(d);
+        }
+        Ok(())
+    }
+}
+impl DateStyler for CompletedDateStyler {
+    fn get_style(&self, date: Date) -> Style {
+        if self.streak_dates.contains(&date) {
+            return STREAK_STYLE;
+        }
+        if self.completed_dates.contains(&date) {
+            return SELECTED_STYLE;
+        }
+        Style::default()
     }
 }

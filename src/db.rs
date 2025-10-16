@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Params, Result};
-use time::Date;
 use std::fmt;
+use time::Date;
 
 use crate::user_habits::HabitItem;
 #[derive(Debug)]
@@ -70,12 +70,16 @@ impl db {
             .expect("idk");
         let habit_vec: Vec<HabitItem> = stmt
             .query_map([], |row| {
+                let id: u64 = row.get(0)?;
+                let frequency: u32 = row.get(3)?;
+                let computed_streak = self.compute_streak(id, frequency);
+
                 Ok(HabitItem {
-                    id: row.get(0)?,
+                    id,
                     name: row.get(1)?,
                     active: row.get(2)?,
-                    frequency: row.get(3)?,
-                    current_streak: row.get(4)?,
+                    frequency,
+                    current_streak: computed_streak,
                     max_streak: row.get(5)?,
                 })
             })
@@ -126,8 +130,119 @@ impl db {
             .collect();
         dates_vec
     }
-    pub fn compute_streak(&self) {
-        todo!()
+
+    pub fn list_streak_dates(&self, id: u64, frequency: u32, current_streak: u32) -> Vec<String> {
+        // If streak is <= 5, return empty vec (no orange highlighting)
+        if current_streak <= 5 {
+            return Vec::new();
+        }
+
+        // Get all completed dates ordered descending
+        let mut stmt = self
+            .conn
+            .as_ref()
+            .expect("Connection refused")
+            .prepare("SELECT date_completed FROM habit_calendar WHERE habit_id = (?1) ORDER BY date_completed DESC")
+            .expect("wrong sql prep");
+
+        let dates_vec: Vec<String> = stmt
+            .query_map([id], |row| Ok(row.get(0)?))
+            .unwrap()
+            .filter_map(|res| res.ok())
+            .collect();
+
+        // Parse and filter to get only the dates that are part of the current streak
+        let parsed_dates: Vec<Date> = dates_vec
+            .iter()
+            .filter_map(|date_str| {
+                Date::parse(
+                    date_str,
+                    &time::format_description::well_known::Iso8601::DEFAULT,
+                )
+                .ok()
+            })
+            .collect();
+
+        if parsed_dates.is_empty() {
+            return Vec::new();
+        }
+
+        let today = time::OffsetDateTime::now_utc().date();
+        let mut streak_dates = Vec::new();
+        let mut expected_date = today;
+
+        // Only include dates that are part of the active streak
+        for completed_date in parsed_dates {
+            let gap = (expected_date - completed_date).whole_days();
+
+            if gap >= 0 && gap <= frequency as i64 {
+                streak_dates.push(completed_date.to_string());
+                expected_date = completed_date - time::Duration::days(frequency as i64);
+            } else {
+                break;
+            }
+        }
+
+        streak_dates
+    }
+    pub fn compute_streak(&self, habit_id: u64, frequency: u32) -> u32 {
+        // Get all completed dates for this habit, ordered by date descending
+        let mut stmt = self
+            .conn
+            .as_ref()
+            .expect("Connection refused")
+            .prepare("SELECT date_completed FROM habit_calendar WHERE habit_id = (?1) ORDER BY date_completed DESC")
+            .expect("wrong sql prep");
+
+        let dates_vec: Vec<String> = stmt
+            .query_map([habit_id], |row| Ok(row.get(0)?))
+            .unwrap()
+            .filter_map(|res| res.ok())
+            .collect();
+
+        if dates_vec.is_empty() {
+            return 0;
+        }
+
+        // Parse dates and calculate streak
+        let parsed_dates: Vec<Date> = dates_vec
+            .iter()
+            .filter_map(|date_str| {
+                Date::parse(
+                    date_str,
+                    &time::format_description::well_known::Iso8601::DEFAULT,
+                )
+                .ok()
+            })
+            .collect();
+
+        if parsed_dates.is_empty() {
+            return 0;
+        }
+
+        let today = time::OffsetDateTime::now_utc().date();
+        let mut streak = 0u32;
+        let mut expected_date = today;
+
+        // Check if the most recent completion is within the frequency window
+        let days_since_last = (today - parsed_dates[0]).whole_days();
+        if days_since_last > frequency as i64 {
+            // Streak is broken
+            return 0;
+        }
+
+        // Count consecutive completions within frequency windows
+        for completed_date in parsed_dates {
+            let gap = (expected_date - completed_date).whole_days();
+
+            if gap >= 0 && gap <= frequency as i64 {
+                streak += 1;
+                expected_date = completed_date - time::Duration::days(frequency as i64);
+            } else {
+                break;
+            }
+        }
+        streak
     }
 
     pub fn get_hours(&self, habit_id: u64, tf: TimeFrame) -> u32 {
@@ -150,7 +265,7 @@ impl db {
     }
 
     pub fn delete_habit(&self, habit_id: u64) -> rusqlite::Result<usize> {
-        let conn = self.conn.as_ref().map_err(|e| {
+        let conn = self.conn.as_ref().map_err(|_| {
             rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISUSE),
                 Some("Database connection failed".to_string()),

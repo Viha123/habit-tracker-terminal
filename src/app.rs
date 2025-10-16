@@ -4,7 +4,6 @@ use ratatui::{
     layout::{Constraint, Layout},
     prelude::*,
     style::{Color, Style, Stylize},
-    symbols::border,
     text::Line,
     widgets::{
         Bar, BarChart, BarGroup, Block, Borders, List, ListItem, ListState, Paragraph,
@@ -13,7 +12,6 @@ use ratatui::{
 };
 use time::OffsetDateTime;
 
-use crate::text_input;
 use crate::user_habits;
 use crate::{date_styler::CompletedDateStyler, my_colors::SELECTED_STYLE};
 use crate::{db::db, text_input::TextInput};
@@ -86,7 +84,7 @@ impl App {
             // self.habit_list_block(outer_layout[0], frame.buffer_mut());
             self.habits.items = self.db.get_habits().clone();
             let items = self.habits.items.clone();
-            let (_items, list_widget) = Self::habit_list_block(&items);
+            let (_items, list_widget) = Self::habit_list_block(&items, &self.input_mode);
             frame.render_stateful_widget(list_widget, outer_layout[0], &mut self.habits.state);
         }
         if self.habits.habit_calendar_track {
@@ -125,21 +123,36 @@ impl App {
         }
     }
 
-    pub fn habit_list_block(items: &'_ [user_habits::HabitItem]) -> (Vec<ListItem<'_>>, List<'_>) {
+    pub fn habit_list_block<'a>(
+        items: &'a [user_habits::HabitItem],
+        input_mode: &InputMode,
+    ) -> (Vec<ListItem<'a>>, List<'a>) {
         let habit_list = Line::from("Habit List").bold().blue().centered();
         // .style(Style::new().fg(convert_color_type(PALETTE.macchiato.colors.blue)));
+
+        let border_style = if *input_mode == InputMode::Normal {
+            SELECTED_STYLE
+        } else {
+            Style::new().fg(my_colors::BORDER_COL)
+        };
 
         let block = Block::new()
             .title(habit_list)
             .borders(Borders::ALL)
-            .border_style(my_colors::BORDER_COL);
+            .border_style(border_style);
 
         let items: Vec<ListItem> = items
             .iter()
             .enumerate()
             .map(|(i, list_item)| {
                 let color = alternate_colors(i);
-                ListItem::from(list_item.name.clone()).bg(color)
+                let item = ListItem::from(list_item.name.clone()).bg(color);
+                // If habit has a streak > 5, style it orange
+                if list_item.current_streak > 5 {
+                    item.style(my_colors::STREAK_STYLE)
+                } else {
+                    item
+                }
             })
             .collect();
         let list = List::new(items.clone())
@@ -156,14 +169,27 @@ impl App {
         habit_calendar_titile_block: &Block<'a>,
     ) -> Option<calendar::Monthly<'a, CompletedDateStyler>> {
         let date = OffsetDateTime::now_utc().date();
-        let idx = self.get_current_habit();
+        let selected_idx = self.habits.state.selected();
 
-        if idx.is_some() {
-            let temp_vec = self.db.list_completed_dates(idx.unwrap());
+        if let Some(idx) = selected_idx {
+            let habit = &self.habits.items[idx];
+            let habit_id = habit.id;
+            let frequency = habit.frequency;
+            let current_streak = habit.current_streak;
+
+            let completed_dates = self.db.list_completed_dates(habit_id);
+            let streak_dates = self
+                .db
+                .list_streak_dates(habit_id, frequency, current_streak);
+
             let mut date_styled_cal = CompletedDateStyler::new();
             date_styled_cal
-                .update_dates(temp_vec)
-                .expect("updated message");
+                .update_dates(completed_dates)
+                .expect("updated completed dates");
+            date_styled_cal
+                .update_streak_dates(streak_dates)
+                .expect("updated streak dates");
+
             let cal = calendar::Monthly::new(date, date_styled_cal)
                 .block(habit_calendar_titile_block.clone())
                 .show_month_header(Style::new().bold())
