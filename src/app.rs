@@ -1,14 +1,23 @@
+use crossterm::event::{KeyCode, KeyboardEnhancementFlags};
 use ratatui::{
-    layout::{Constraint, Layout}, prelude::*, style::{Color, Style, Stylize}, symbols::border, text::Line, widgets::{
-        calendar::{self}, Block, Borders, List, ListItem, ListState, Paragraph
-    }, DefaultTerminal, Frame
+    DefaultTerminal, Frame,
+    layout::{Constraint, Layout},
+    prelude::*,
+    style::{Color, Style, Stylize},
+    symbols::border,
+    text::Line,
+    widgets::{
+        Block, Borders, List, ListItem, ListState, Paragraph,
+        calendar::{self},
+    },
 };
 use time::OffsetDateTime;
 
-use crate::db::db;
-use crate::my_colors;
+use crate::text_input;
 use crate::user_habits;
 use crate::{date_styler::CompletedDateStyler, my_colors::SELECTED_STYLE};
+use crate::{db::db, text_input::TextInput};
+use crate::{input_mode::InputMode, my_colors};
 use color_eyre::Result;
 // /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
@@ -17,25 +26,13 @@ pub struct App {
     pub running: bool,
     pub habits: user_habits::UserHabits,
     pub input_mode: InputMode,
-    pub habit_freq_buffer: String,
-    pub habit_hours_buffer: String,
+    pub habit_freq_buffer: TextInput,
+    pub habit_hours_buffer: TextInput,
     pub habit_hours_done: bool,
-    pub habit_name_buffer: String,
+    pub habit_name_buffer: TextInput,
     pub db: db,
 }
-#[derive(Debug, PartialEq)]
-pub enum InputMode {
-    Normal,
-    EnteringName,
-    EnteringFrequency,
-    MarkingDone
-}
 
-impl Default for InputMode {
-    fn default() -> Self {
-        InputMode::Normal
-    }
-}
 impl App {
     /// Construct a new instance of [`App`].
     pub fn new() -> Self {
@@ -77,6 +74,10 @@ impl App {
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(outer_layout[1]);
+        let enter_hours_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(80), Constraint::Percentage(20)])
+            .split(inner_layout[0]);
         let left_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Percentage(40), Constraint::Percentage(60)])
@@ -106,10 +107,24 @@ impl App {
 
             let block = self.habit_calendar_tracker_block(&habit_calendar_tracker_title_block);
             if block.is_some() {
-                frame.render_widget(&block, inner_layout[0]);
+                frame.render_widget(&block, enter_hours_layout[0]);
             } else {
-                frame.render_widget(&habit_calendar_tracker_title_block, inner_layout[0]);
+                frame.render_widget(&habit_calendar_tracker_title_block, enter_hours_layout[0]);
             }
+            // add a text input here
+            let hours_block = Block::new()
+                .title(
+                    Line::from("Log Hours")
+                        .bold()
+                        .blue()
+                        .centered(),
+                )
+                .borders(Borders::ALL)
+                .border_style(border_style);
+            let hours_paragraph = Paragraph::new(self.habit_hours_buffer.content.clone())
+                .centered()
+                .block(hours_block);
+            frame.render_widget(hours_paragraph, enter_hours_layout[1]);
         }
         if self.habits.habit_stats {
             frame.render_widget(self.habit_stats_tracker(), inner_layout[1])
@@ -151,7 +166,7 @@ impl App {
     ) -> Option<calendar::Monthly<'a, CompletedDateStyler>> {
         let date = OffsetDateTime::now_utc().date();
         let idx = self.get_current_habit();
-        
+
         if idx.is_some() {
             let temp_vec = self.db.list_completed_dates(idx.unwrap());
             let mut date_styled_cal = CompletedDateStyler::new();
@@ -208,7 +223,7 @@ impl App {
             para_style = SELECTED_STYLE;
         }
 
-        let name_paragraph = Paragraph::new(self.habit_name_buffer.clone())
+        let name_paragraph = Paragraph::new(self.habit_name_buffer.content.clone())
             .centered()
             .block(name_block);
         frame.render_widget(name_paragraph, chunks[1]);
@@ -218,7 +233,7 @@ impl App {
             .title("Frequency (Times/Week)")
             .borders(Borders::ALL)
             .border_style(para_style);
-        let freq_paragraph = Paragraph::new(self.habit_freq_buffer.clone())
+        let freq_paragraph = Paragraph::new(self.habit_freq_buffer.content.clone())
             .centered()
             .block(freq_block);
         frame.render_widget(freq_paragraph, chunks[2]);
@@ -227,9 +242,7 @@ impl App {
     pub fn get_current_habit(&self) -> Option<u64> {
         let idx = self.habits.state.selected();
         if idx.is_some() {
-            return Some(
-                self.habits.items[idx.unwrap()].id
-            );
+            return Some(self.habits.items[idx.unwrap()].id);
         } else {
             return None;
         }

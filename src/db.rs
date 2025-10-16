@@ -72,11 +72,6 @@ impl db {
     }
 
     pub fn add_completed(&self, date: &Date, item: &HabitItem, hours: u32) {
-        // let mut stmt = self.conn.as_ref().expect("should be a connection").prepare("INSERT INTO habit_calendar(habit_id, date_completed, hours, notes) VALUES (?1, ?1, ?1, ?1)").expect("error in sql statement");
-
-        // let _res = stmt
-        //     .execute((item.id, date.to_string(), hours, "Nothing"))
-        //     .expect("Added completed date for today");
         let _res = self.conn.as_ref().unwrap().execute("INSERT INTO habit_calendar(habit_id, date_completed, hours, notes) VALUES (?1, ?2, ?3, ?4)", (item.id, date.to_string(), hours, "Nothing"));
         
     }
@@ -113,6 +108,20 @@ impl db {
     }
     pub fn compute_streak() {
         todo!()
+    }
+
+    pub fn delete_habit(&self, habit_id: u64) -> rusqlite::Result<usize> {
+        let conn = self.conn.as_ref().map_err(|e| rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISUSE),
+            Some("Database connection failed".to_string())
+        ))?;
+        
+        let rows_affected = conn.execute(
+            "DELETE FROM habits WHERE habit_id = ?1",
+            [habit_id],
+        )?;
+        
+        Ok(rows_affected)
     }
 }
 

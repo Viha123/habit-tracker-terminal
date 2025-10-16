@@ -2,9 +2,9 @@ use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use time::{Date, OffsetDateTime};
 
-use crate::app::{App, InputMode};
+use crate::app::App;
 use crate::db::{self};
-use crate::user_habits::HabitItem;
+use crate::input_mode::InputMode;
 impl App {
     /// Reads the crossterm events and updates the state of [`App`].
     ///
@@ -28,6 +28,7 @@ impl App {
             InputMode::EnteringName => self.handle_name_input(key),
             InputMode::EnteringFrequency => self.handle_freq_input(key),
             InputMode::MarkingDone => self.handle_input_done(key),
+            InputMode::EnteringHours => self.habit_hours_buffer.handle_key(key.code),
         }
     }
 
@@ -42,29 +43,43 @@ impl App {
             (_, KeyCode::Char('G') | KeyCode::End) => self.select_last(),
             (_, KeyCode::Esc) => self.habits.show_add_habit = false,
             (_, KeyCode::Char('a')) => {
-                self.input_mode = InputMode::EnteringName;
-                self.habit_name_buffer.clear();
+                self.input_mode.next(key.code);
                 self.habits.show_add_habit = true;
             }
+            (_, KeyCode::Char('d')) => {
+                let idx = self.get_current_habit();
+                if idx.is_some() {
+                    self.db
+                        .delete_habit(idx.unwrap())
+                        .expect("this habit id does not exist");
+                }
+            }
             (_, KeyCode::Tab) => {
-                self.input_mode = InputMode::MarkingDone;
+                self.input_mode.next(key.code);
             }
             _ => {}
         }
     }
     fn handle_input_done(&mut self, key: KeyEvent) {
+        self.habit_hours_buffer.handle_key(key.code);
         match key.code {
             KeyCode::BackTab => {
-                self.input_mode = InputMode::Normal;
+                self.input_mode.prev();
             }
-            
+            KeyCode::Left => {
+                //display previous months calendar
+                todo!()
+            }
+            KeyCode::Right => {
+                todo!()
+            }
             KeyCode::Enter => {
                 let idx = self.habits.state.selected();
                 if idx.is_some() {
                     self.db.add_completed(
                         &OffsetDateTime::now_utc().date(),
                         &self.habits.items[idx.unwrap()],
-                        1,
+                        self.habit_hours_buffer.content.parse().unwrap_or(0),
                     );
                 }
             }
@@ -73,33 +88,30 @@ impl App {
         }
     }
     fn handle_name_input(&mut self, key: KeyEvent) {
+        self.habit_name_buffer.handle_key(key.code);
         match key.code {
             KeyCode::Enter | KeyCode::Tab => {
-                self.input_mode = InputMode::EnteringFrequency;
-                self.habit_freq_buffer.clear();
+                self.input_mode.next(key.code);
             }
             KeyCode::BackTab | KeyCode::Esc => {
-                self.input_mode = InputMode::Normal;
-                self.habit_name_buffer.clear();
+                self.input_mode.prev();
                 self.habits.show_add_habit = false;
-            }
-            KeyCode::Char(c) => self.habit_name_buffer.push(c),
-            KeyCode::Backspace => {
-                self.habit_name_buffer.pop();
             }
             _ => {}
         }
     }
 
     fn handle_freq_input(&mut self, key: KeyEvent) {
+        self.habit_freq_buffer.handle_key(key.code);
         match key.code {
             KeyCode::Enter | KeyCode::Tab => {
-                self.input_mode = InputMode::Normal;
+                self.input_mode.next(key.code);
                 self.habits.show_add_habit = false;
                 let new_habit = self.db.add_habit(
-                    &self.habit_name_buffer,
+                    &self.habit_name_buffer.content,
                     &self
                         .habit_freq_buffer
+                        .content
                         .parse()
                         .expect("Failed to parse frequency"),
                 );
@@ -108,15 +120,10 @@ impl App {
                 }
             }
             KeyCode::BackTab => {
-                self.input_mode = InputMode::EnteringName;
-                self.habit_freq_buffer.clear();
-            }
-            KeyCode::Char(c) => self.habit_freq_buffer.push(c),
-            KeyCode::Backspace => {
-                self.habit_freq_buffer.pop();
+                self.input_mode.prev();
             }
             KeyCode::Esc => {
-                self.input_mode = InputMode::Normal;
+                self.input_mode.prev();
                 self.habits.show_add_habit = false;
             }
             _ => {}

@@ -4,8 +4,8 @@ mod my_colors;
 mod user_habits;
 mod db;
 mod key_handlers;
-
-
+mod text_input;
+mod input_mode;
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
