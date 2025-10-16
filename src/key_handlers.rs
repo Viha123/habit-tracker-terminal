@@ -28,7 +28,7 @@ impl App {
             InputMode::EnteringName => self.handle_name_input(key),
             InputMode::EnteringFrequency => self.handle_freq_input(key),
             InputMode::MarkingDone => self.handle_input_done(key),
-            InputMode::EnteringHours => self.habit_hours_buffer.handle_key(key.code),
+            InputMode::EnteringHours => self.handle_input_done(key),
         }
     }
 
@@ -61,7 +61,9 @@ impl App {
         }
     }
     fn handle_input_done(&mut self, key: KeyEvent) {
-        self.habit_hours_buffer.handle_key(key.code);
+        if (self.input_mode == InputMode::EnteringHours) {
+            self.habit_hours_buffer.handle_key(key.code);
+        }
         match key.code {
             KeyCode::BackTab => {
                 self.input_mode.prev();
@@ -82,6 +84,12 @@ impl App {
                         self.habit_hours_buffer.content.parse().unwrap_or(0),
                     );
                 }
+                self.habit_hours_buffer.content.clear();
+                self.habit_hours_buffer.cursor_position = 0;
+                
+            }
+            KeyCode::Tab => {
+                self.input_mode.next(key.code);
             }
             // maybe this mode is view only for now. Mark done should just happen on the left bar
             _ => {}
@@ -129,6 +137,7 @@ impl App {
             _ => {}
         }
     }
+
     fn select_none(&mut self) {
         self.habits.state.select(None);
     }

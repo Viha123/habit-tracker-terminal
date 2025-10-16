@@ -72,8 +72,13 @@ impl db {
     }
 
     pub fn add_completed(&self, date: &Date, item: &HabitItem, hours: u32) {
-        let _res = self.conn.as_ref().unwrap().execute("INSERT INTO habit_calendar(habit_id, date_completed, hours, notes) VALUES (?1, ?2, ?3, ?4)", (item.id, date.to_string(), hours, "Nothing"));
-        
+        let _res = self.conn.as_ref().unwrap().execute(
+            "INSERT INTO habit_calendar(habit_id, date_completed, hours) 
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(habit_id, date_completed) 
+         DO UPDATE SET hours = ?3",
+            (item.id, date.to_string(), hours), 
+        );
     }
 
     pub fn get_id_from_name(&self, name: String) -> u64 {
@@ -111,16 +116,15 @@ impl db {
     }
 
     pub fn delete_habit(&self, habit_id: u64) -> rusqlite::Result<usize> {
-        let conn = self.conn.as_ref().map_err(|e| rusqlite::Error::SqliteFailure(
-            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISUSE),
-            Some("Database connection failed".to_string())
-        ))?;
-        
-        let rows_affected = conn.execute(
-            "DELETE FROM habits WHERE habit_id = ?1",
-            [habit_id],
-        )?;
-        
+        let conn = self.conn.as_ref().map_err(|e| {
+            rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISUSE),
+                Some("Database connection failed".to_string()),
+            )
+        })?;
+
+        let rows_affected = conn.execute("DELETE FROM habits WHERE id = ?1", [habit_id])?;
+
         Ok(rows_affected)
     }
 }

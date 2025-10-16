@@ -111,20 +111,8 @@ impl App {
             } else {
                 frame.render_widget(&habit_calendar_tracker_title_block, enter_hours_layout[0]);
             }
-            // add a text input here
-            let hours_block = Block::new()
-                .title(
-                    Line::from("Log Hours")
-                        .bold()
-                        .blue()
-                        .centered(),
-                )
-                .borders(Borders::ALL)
-                .border_style(border_style);
-            let hours_paragraph = Paragraph::new(self.habit_hours_buffer.content.clone())
-                .centered()
-                .block(hours_block);
-            frame.render_widget(hours_paragraph, enter_hours_layout[1]);
+            // Render hours input block
+            self.render_hours_input(frame, enter_hours_layout[1]);
         }
         if self.habits.habit_stats {
             frame.render_widget(self.habit_stats_tracker(), inner_layout[1])
@@ -237,6 +225,24 @@ impl App {
             .centered()
             .block(freq_block);
         frame.render_widget(freq_paragraph, chunks[2]);
+    }
+
+    fn render_hours_input(&self, frame: &mut Frame, area: ratatui::layout::Rect) {
+        let mut border_style = my_colors::NORMAL_STYLE;
+        if self.input_mode == InputMode::EnteringHours {
+            border_style = SELECTED_STYLE;
+        }
+
+        let hours_block = Block::new()
+            .title(Line::from("Log Hours").bold().blue().centered())
+            .borders(Borders::ALL)
+            .border_style(border_style);
+
+        let hours_paragraph = Paragraph::new(self.habit_hours_buffer.content.clone())
+            .centered()
+            .block(hours_block);
+
+        frame.render_widget(hours_paragraph, area);
     }
 
     pub fn get_current_habit(&self) -> Option<u64> {
